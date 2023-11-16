@@ -9,13 +9,7 @@ PriceCheckHub is a web scraping and search platform that allows users to retriev
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
   - [Configuration](#configuration)
-- [Project Structure](#project-structure)
-- [Usage](#usage)
-- [Technologies Used](#technologies-used)
-- [Contributing](#contributing)
-- [License](#license)
-- [Acknowledgments](#acknowledgments)
-
+  
 ## Overview
 
 PriceCheckHub simplifies web scraping and information retrieval by providing a unified platform for searching and organizing data from different websites. Whether you need to compare prices, gather product information, or monitor changes, PriceCheckHub has got you covered.
