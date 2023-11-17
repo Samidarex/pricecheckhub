@@ -13,6 +13,9 @@ node_modules/
 /.next/
 /out/
 
+#package-lock
+package-lock.json
+
 # production
 /build
 
