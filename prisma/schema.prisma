@@ -8,13 +8,21 @@ datasource db {
 }
 
 model Item {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  name      String
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  lastUpdated   DateTime?   @default(now())
+  image         String
+  price         Float
+  status        ItemStatus  @default(UPDATED)
+  link          String      @unique
+  itemRefreshId String      @db.ObjectId
+  itemRefresh   ItemRefresh @relation(fields: [itemRefreshId], references: [id])
+}
+
+model ItemRefresh {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
   lastUpdated DateTime? @default(now())
-  image     String
-  price     Float
-  status ItemStatus @default(REQUIRES_FETCH)
-  link      String   @unique
+  Item Item[]
 }
 
 enum ItemStatus {

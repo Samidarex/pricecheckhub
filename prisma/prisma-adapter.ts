@@ -2,8 +2,7 @@ import { ItemStatus, Item } from '@prisma/client';
 import prisma from './prisma';
 import { ItemModel } from './models/ItemModel';
 
-export async function addItemToDatabase(itemModel: ItemModel): Promise<void> {
-    // Check if an item re
+export async function addItemToDatabase(itemModel: ItemModel[]): Promise<void> {
     const dbItem = await findItemByLink(itemModel.link);
 
     if (dbItem != null) {
