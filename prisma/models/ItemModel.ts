@@ -3,4 +3,5 @@ export interface ItemModel{
     image: string,
     price: number,
     link: string,
+    itemRefreshLink: string,
 }

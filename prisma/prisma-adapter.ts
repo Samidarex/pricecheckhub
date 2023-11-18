@@ -1,58 +1,83 @@
-import { ItemStatus, Item } from '@prisma/client';
+import { ItemStatus, ItemRefresh} from '@prisma/client';
 import prisma from './prisma';
 import { ItemModel } from './models/ItemModel';
 
-export async function addItemToDatabase(itemModel: ItemModel[]): Promise<void> {
-    const dbItem = await findItemByLink(itemModel.link);
+export async function addItemsToDatabase(itemModels: ItemModel[]): Promise<void> {
+    if (itemModels != null && itemModels.length > 0) {
 
-    if (dbItem != null) {
-        const updateRequired = await isUpdateRequired(dbItem);
+        const itemLinks: string[] = itemModels.map(item => item.link);
+        const dbItems: ItemRefresh[] | null = await findItemsByLink(itemLinks);
 
-        if (updateRequired) {
-            await prisma.item.update({
-                where: { link: itemModel.link },
-                data: { price: itemModel.price, status: ItemStatus.UPDATED },
-            });
-        }
-        else
-        {
-            console.log(`Skipping item ${dbItem.name}, listing already exists!`);
-        }
-    }
-    else {
-        // If no item with the same link exists, add the new item to the database
-        await prisma.item.create({
-            data: itemModel,
-        });
-        console.log('Item added to the database:', itemModel);
-    }
-}
+        await prisma.$transaction(async (prisma) => {
+            if (dbItems != null && dbItems.length > 0) {
+                const updateList: string[] = await getUpdateItemList(dbItems);
 
-export async function isUpdateRequired(dbItem: Item): Promise<boolean> {
-    if (dbItem != null) {
-        if (dbItem.lastUpdated) {
-            const lastUpdateThreshold = new Date();
-            lastUpdateThreshold.setHours(lastUpdateThreshold.getHours() - 72);
+                if (updateList != null) {
+                    // Find common links between itemModels and updateList
+                    const commonLinks: string[] = updateList.filter(link => itemLinks.includes(link));
 
-            // Check if the last update is older than 72 hours
-            if (dbItem.lastUpdated < lastUpdateThreshold) {
-                // Update the status property to "REQUIRES_FETCH"
-                //TODO: maybe make the price update here, instead of making another transaction?
-                prisma.item.update({
-                    where: { link: dbItem.link },
-                    data: { status: 'REQUIRES_FETCH' },
+                    if (commonLinks.length > 0) {
+                        for (const link of commonLinks) {
+                            const itemToUpdate = itemModels.find(item => item.link === link);
+
+                            if (itemToUpdate) {
+                                await prisma.item.upsert({
+                                    where: { link: link },
+                                    update: {
+                                        lastUpdated: new Date(Date.now()).toISOString(),
+                                        price: itemToUpdate.price,
+                                        status: ItemStatus.UPDATED,
+                                    },
+                                    create: itemToUpdate
+                                });
+                            }
+                        }
+                    } else {
+                        console.log(`Skipping items ${itemModels.length}, listings already exist!`);
+                    }
+                } else {
+                    console.log(`Skipping items ${itemModels.length}, listings already exist!`);
+                }
+            } else {
+                console.log(itemModels);
+                // If no item with the same link exists, add the new item to the database
+                await prisma.item.createMany({
+                    data: itemModels,
                 });
-                return true;
+                const refreshItems: Omit<ItemModel, 'name' | 'image' | 'itemRefreshLink' | 'price'>[] = itemModels.map(({ name, image, itemRefreshLink, price, ...rest }) => rest);
+                await prisma.itemRefresh.createMany({
+                    data: refreshItems
+                })
+                console.log('Items added to the database:', itemModels.length);
             }
-        }
+        });
     }
-    return false;
 }
 
-async function findItemByLink(link: string): Promise<Item | null> {
-    const existingItem: Item | null = await prisma.item.findUnique({
+export async function getUpdateItemList(dbItems: ItemRefresh[]): Promise<string[]> {
+    const lastUpdateThreshold = new Date();
+    lastUpdateThreshold.setHours(lastUpdateThreshold.getHours() - 72);
+
+    const updateLinks = await prisma.itemRefresh.findMany({
         where: {
-            link: link,
+            lastUpdated: {
+                lt: lastUpdateThreshold,
+            },
+        },
+        select: {
+            link: true,
+        },
+    });
+
+    return updateLinks.map(item => item.link);
+}
+
+async function findItemsByLink(links: string[]): Promise<ItemRefresh[] | null> {
+    const existingItem: ItemRefresh[] | null = await prisma.item.findMany({
+        where: {
+            link: {
+                in: links,
+            }
         },
     });
     return existingItem;
