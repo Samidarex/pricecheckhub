@@ -10,10 +10,11 @@ datasource db {
 model Item {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   name      String
+  lastUpdated DateTime? @default(now())
   image     String
   price     Float
-  isAvailable Boolean
-  link      String
+  status ItemStatus @default(REQUIRES_FETCH)
+  link      String   @unique
 }
 
 enum ItemStatus {
