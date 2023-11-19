@@ -1,62 +1,12 @@
-import { ItemStatus, ItemRefresh} from '@prisma/client';
+import { ItemStatus, ItemRefresh, Item } from '@prisma/client';
 import prisma from './prisma';
 import { ItemModel } from './models/ItemModel';
 
-export async function addItemsToDatabase(itemModels: ItemModel[]): Promise<void> {
-    if (itemModels != null && itemModels.length > 0) {
+const HOURS_THRESHOLD = 72;
 
-        const itemLinks: string[] = itemModels.map(item => item.link);
-        const dbItems: ItemRefresh[] | null = await findItemsByLink(itemLinks);
-
-        await prisma.$transaction(async (prisma) => {
-            if (dbItems != null && dbItems.length > 0) {
-                const updateList: string[] = await getUpdateItemList(dbItems);
-
-                if (updateList != null) {
-                    // Find common links between itemModels and updateList
-                    const commonLinks: string[] = updateList.filter(link => itemLinks.includes(link));
-
-                    if (commonLinks.length > 0) {
-                        for (const link of commonLinks) {
-                            const itemToUpdate = itemModels.find(item => item.link === link);
-
-                            if (itemToUpdate) {
-                                await prisma.item.upsert({
-                                    where: { link: link },
-                                    update: {
-                                        lastUpdated: new Date(Date.now()).toISOString(),
-                                        price: itemToUpdate.price,
-                                        status: ItemStatus.UPDATED,
-                                    },
-                                    create: itemToUpdate
-                                });
-                            }
-                        }
-                    } else {
-                        console.log(`Skipping items ${itemModels.length}, listings already exist!`);
-                    }
-                } else {
-                    console.log(`Skipping items ${itemModels.length}, listings already exist!`);
-                }
-            } else {
-                console.log(itemModels);
-                // If no item with the same link exists, add the new item to the database
-                await prisma.item.createMany({
-                    data: itemModels,
-                });
-                const refreshItems: Omit<ItemModel, 'name' | 'image' | 'itemRefreshLink' | 'price'>[] = itemModels.map(({ name, image, itemRefreshLink, price, ...rest }) => rest);
-                await prisma.itemRefresh.createMany({
-                    data: refreshItems
-                })
-                console.log('Items added to the database:', itemModels.length);
-            }
-        });
-    }
-}
-
-export async function getUpdateItemList(dbItems: ItemRefresh[]): Promise<string[]> {
+async function getStaleLinks(): Promise<string[]> {
     const lastUpdateThreshold = new Date();
-    lastUpdateThreshold.setHours(lastUpdateThreshold.getHours() - 72);
+    lastUpdateThreshold.setHours(lastUpdateThreshold.getHours() - HOURS_THRESHOLD);
 
     const updateLinks = await prisma.itemRefresh.findMany({
         where: {
@@ -73,17 +23,80 @@ export async function getUpdateItemList(dbItems: ItemRefresh[]): Promise<string[
 }
 
 async function findItemsByLink(links: string[]): Promise<ItemRefresh[] | null> {
-    const existingItem: ItemRefresh[] | null = await prisma.item.findMany({
+    return prisma.item.findMany({
         where: {
             link: {
                 in: links,
-            }
+            },
         },
     });
-    return existingItem;
 }
 
-// Close the Prisma client connection when done
+async function updateExistingItems(itemModels: ItemModel[], dbItems: ItemRefresh[]): Promise<void> {
+    const updateList: string[] = await getStaleLinks();
+    const unAddedItems: ItemModel[] = [];
+
+    for (const item of itemModels) {
+        const linkExistsInDb = dbItems.some(dbItem => dbItem.link === item.link);
+
+        if (linkExistsInDb) {
+            continue;
+        }
+
+        if (updateList.includes(item.link)) {
+            await prisma.item.upsert({
+                where: { link: item.link },
+                update: {
+                    lastUpdated: new Date(Date.now()).toISOString(),
+                    price: item.price,
+                    status: ItemStatus.UPDATED,
+                },
+                create: item,
+            });
+        } else {
+            unAddedItems.push(item);
+        }
+    }
+
+    if (unAddedItems.length > 0) {
+        console.log(unAddedItems);
+        addItemsToCollections(unAddedItems);
+    } else {
+        itemModels.map(item => console.log(`Skipping ${item.name}, listing already exist!`));
+    }
+}
+
+async function addItemsToCollections(items: ItemModel[]): Promise<void> {
+    await prisma.item.createMany({
+        data: items,
+    });
+
+    const refreshItems: Omit<ItemModel, 'name' | 'image' | 'itemRefreshLink' | 'price' | 'oldPrice' | 'isAvailable'>[] = items.map(({ name, image, itemRefreshLink, price, oldPrice, isAvailable, ...rest }) => rest);
+
+    await prisma.itemRefresh.createMany({
+        data: refreshItems,
+    });
+}
+
+export async function addItemsToDatabase(itemModels: ItemModel[]): Promise<void> {
+    if (itemModels == null || itemModels.length === 0) {
+        return;
+    }
+
+    const itemLinks: string[] = itemModels.map(item => item.link);
+    const dbItems: ItemRefresh[] | null = await findItemsByLink(itemLinks);
+
+    await prisma.$transaction(async (prisma) => {
+        if (dbItems != null && dbItems.length > 0) {
+            await updateExistingItems(itemModels, dbItems);
+        } else {
+            console.log(itemModels);
+            addItemsToCollections(itemModels);
+            console.log('Items added to the database:', itemModels.length);
+        }
+    });
+}
+
 export async function closePrismaConnection(): Promise<void> {
     await prisma.$disconnect();
 }

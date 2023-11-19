@@ -4,4 +4,6 @@ export interface ItemModel{
     price: number,
     link: string,
     itemRefreshLink: string,
+    oldPrice?: number,
+    isAvailable: boolean
 }
