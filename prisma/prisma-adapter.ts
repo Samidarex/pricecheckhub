@@ -40,19 +40,20 @@ async function updateExistingItems(itemModels: ItemModel[], dbItems: ItemRefresh
         const linkExistsInDb = dbItems.some(dbItem => dbItem.link === item.link);
 
         if (linkExistsInDb) {
+            if (updateList.includes(item.link)) {
+                await prisma.item.upsert({
+                    where: { link: item.link },
+                    update: {
+                        lastUpdated: new Date(Date.now()).toISOString(),
+                        price: item.price,
+                        status: ItemStatus.UPDATED,
+                    },
+                    create: item,
+                });
+                console.log("Item updated succesfully", item.name);
+            }
+            console.log(`Skipping ${item.name}, listing already exist!`)
             continue;
-        }
-
-        if (updateList.includes(item.link)) {
-            await prisma.item.upsert({
-                where: { link: item.link },
-                update: {
-                    lastUpdated: new Date(Date.now()).toISOString(),
-                    price: item.price,
-                    status: ItemStatus.UPDATED,
-                },
-                create: item,
-            });
         } else {
             unAddedItems.push(item);
         }
@@ -61,8 +62,6 @@ async function updateExistingItems(itemModels: ItemModel[], dbItems: ItemRefresh
     if (unAddedItems.length > 0) {
         console.log(unAddedItems);
         addItemsToCollections(unAddedItems);
-    } else {
-        itemModels.map(item => console.log(`Skipping ${item.name}, listing already exist!`));
     }
 }
 
