@@ -1,6 +1,7 @@
 import { ItemStatus, ItemRefresh, Item } from '@prisma/client';
 import prisma from './prisma';
 import { ItemModel } from './models/ItemModel';
+import { cacheService } from '../caching/cacheService';
 
 const HOURS_THRESHOLD = 72;
 
@@ -23,13 +24,25 @@ async function getStaleLinks(): Promise<string[]> {
 }
 
 async function findItemsByLink(links: string[]): Promise<ItemRefresh[] | null> {
-    return prisma.item.findMany({
+    const cachedItems = await Promise.all(links.map(link => cacheService.get<ItemRefresh | null>(link)));
+
+    const missingLinks = links.filter((link, index) => cachedItems[index] === null);
+
+    if (cachedItems) {
+        console.log("Got cached items:", cachedItems.length);
+        return cachedItems
+            .filter(item => item !== null) as ItemRefresh[];
+    }
+
+    const dbItems = (await prisma.item.findMany({
         where: {
             link: {
-                in: links,
+                in: missingLinks,
             },
         },
-    });
+    })) as ItemRefresh[];
+
+    return dbItems;
 }
 
 async function updateExistingItems(itemModels: ItemModel[], dbItems: ItemRefresh[]): Promise<void> {
@@ -70,11 +83,20 @@ async function addItemsToCollections(items: ItemModel[]): Promise<void> {
         data: items,
     });
 
+    await Promise.all(
+        items.map(item => cacheService.set(item.link, item, 60 * 60 * 72))
+    );
+
     const refreshItems: Omit<ItemModel, 'name' | 'image' | 'itemRefreshLink' | 'price' | 'oldPrice' | 'isAvailable'>[] = items.map(({ name, image, itemRefreshLink, price, oldPrice, isAvailable, ...rest }) => rest);
 
     await prisma.itemRefresh.createMany({
         data: refreshItems,
     });
+
+    await Promise.all(
+        refreshItems.map(refreshItem => cacheService.set(refreshItem.link, refreshItem, 60 * 60 * 72))
+    );
+    console.log('Cached items: ', items.length);
 }
 
 export async function addItemsToDatabase(itemModels: ItemModel[]): Promise<void> {
@@ -85,15 +107,13 @@ export async function addItemsToDatabase(itemModels: ItemModel[]): Promise<void>
     const itemLinks: string[] = itemModels.map(item => item.link);
     const dbItems: ItemRefresh[] | null = await findItemsByLink(itemLinks);
 
-    await prisma.$transaction(async (prisma) => {
-        if (dbItems != null && dbItems.length > 0) {
-            await updateExistingItems(itemModels, dbItems);
-        } else {
-            console.log(itemModels);
-            addItemsToCollections(itemModels);
-            console.log('Items added to the database:', itemModels.length);
-        }
-    });
+    if (dbItems != null && dbItems.length > 0) {
+        await updateExistingItems(itemModels, dbItems);
+    } else {
+        console.log(itemModels);
+        addItemsToCollections(itemModels);
+        console.log('Items added to the database:', itemModels.length);
+    }
 }
 
 export async function closePrismaConnection(): Promise<void> {
