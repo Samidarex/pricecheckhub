@@ -10,7 +10,7 @@ datasource db {
 model Item {
   id              String      @id @default(auto()) @map("_id") @db.ObjectId
   name            String
-  lastUpdated     DateTime?   @default(now())
+  lastUpdated     DateTime?   @default(now()) @updatedAt
   image           String
   price           Float
   status          ItemStatus  @default(UPDATED)
