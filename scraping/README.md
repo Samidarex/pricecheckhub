@@ -1,6 +1,6 @@
 # Scrapers
 
-This project is a personal scraping service that I've developed to enhance my practical experience in web scraping.
+This project is a personal scraping service that I've developed to enhance my practical experience.
 
 So no concrete services will be provided.
 
