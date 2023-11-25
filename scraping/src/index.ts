@@ -1,7 +1,7 @@
 import express from 'express';
-import { addItemToDatabase, closePrismaConnection } from '../../prisma/prisma-adapter';
-import { ItemModel } from '../../prisma/models/ItemModel';
-import { maximumService } from './services/maximum/maximum-service';
+import { addItemsToDatabase, closePrismaConnection } from '../../prisma/prisma-adapter';
+import getServicesData from './services/services';
+import { getAllDataFromCache, getMemoryInfo } from '../../caching/cacheService';
 
 const app = express();
 const port = 3001;
@@ -9,22 +9,10 @@ const port = 3001;
 app.get('/search/:query', async (req, res) => {
   const query: string = req.params.query;
   try {
-    maximumService(query)
-      .then((items) => {
-        items?.map((item) => {
-          addItemToDatabase(item)
-            .then(() => {
-              res.status(200).send(`Item ${item.name} added succesfully`);
-              closePrismaConnection();
-            })
-            .catch((error) => {
-              res.status(500).send("Server error :(");
-              console.log(error);
-            })
-        })
-      })
+    await getMemoryInfo();
   }
   catch (err) {
+    res.status(500).send();
     console.log(err);
   }
 });
