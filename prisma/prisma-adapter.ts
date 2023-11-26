@@ -26,12 +26,12 @@ async function getStaleLinks(): Promise<string[]> {
 async function findItemsByLink(links: string[]): Promise<ItemRefresh[] | null> {
     const cachedItems = await Promise.all(links.map(link => cacheService.get<ItemRefresh>(link)));
 
-    const missingLinks = links.filter((link, index) => cachedItems[index] === null);
+    const missingLinks = links.filter((link, index) => cachedItems[index] === null).filter(link => link !== null);
     if (cachedItems.every(item => item !== null)) {
         console.log("Got cached items:", cachedItems.length);
         return cachedItems.filter(item => item !== null) as ItemRefresh[];
     }
-
+    
     const dbItems = (await prisma.item.findMany({
         where: {
             link: {
