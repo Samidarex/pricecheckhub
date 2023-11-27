@@ -15,10 +15,11 @@ This project is meant for educational and personal use only. I do not endorse or
 
 ## Features
 
-- Efficient search functionality[:heavy_minus_sign:]
-- Caching of search results for improved performance[:heavy_minus_sign:]
-- Microservices architecture for scalability[:heavy_minus_sign:]
+- Efficient search functionality[:heavy_check_mark:]
+- Caching of search results for improved performance[:heavy_check_mark:]
+- Microservices architecture for scalability[:heavy_check_mark:]
 - Integration with Elasticsearch for fast and flexible searches[:heavy_minus_sign:]
+- Authentication system[:heavy_minus_sign:]
 
 ## Getting Started
 
